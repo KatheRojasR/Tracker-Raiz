@@ -355,6 +355,51 @@ const CATS=[
 
 const SK_S='diaspora-s-v5',SK_I='diaspora-i-v5',SK_SP='diaspora-sp-v5';
 
+// ── CLOUD STORAGE (JSONBin.io) ──────────────────────────────────────────────
+// Instrucciones para activar:
+// 1. Ve a https://jsonbin.io → crea cuenta gratis
+// 2. Crea un nuevo Bin con este contenido inicial: {"sessions":[],"insights":[],"sprintData":{"days":{},"cats":{}}}
+// 3. Copia el BIN_ID (ej: 6642abc...) y tu API Key (X-Master-Key)
+// 4. Pégalos abajo y sube el archivo a GitHub
+const CLOUD_BIN_ID = '6a06436aadc21f119a9fa588';       // ← pega aquí el BIN ID
+const CLOUD_API_KEY = '$2a$10$UFEpCle0s8QekbX/5Nm1FuUzC3km9jkrMLCOxYFevEp7SQ6VpWvYO';      // ← pega aquí tu API Key
+const USE_CLOUD = CLOUD_BIN_ID !== '' && CLOUD_API_KEY !== '';
+
+async function cloudSave(){
+  if(!USE_CLOUD) return false;
+  try{
+    setSI('guardando…');
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${CLOUD_BIN_ID}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':CLOUD_API_KEY},
+      body:JSON.stringify({sessions,insights,sprintData})
+    });
+    if(res.ok){setSI('guardado ☁️');return true;}
+    else{setSI('error nube');return false;}
+  }catch{setSI('sin conexión');return false;}
+}
+
+async function cloudLoad(){
+  if(!USE_CLOUD) return false;
+  try{
+    setSI('cargando…');
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${CLOUD_BIN_ID}/latest`,{
+      headers:{'X-Master-Key':CLOUD_API_KEY}
+    });
+    if(res.ok){
+      const data = await res.json();
+      const record = data.record;
+      if(record.sessions && record.sessions.length > 0) sessions = record.sessions;
+      if(record.insights && record.insights.length > 0) insights = record.insights;
+      if(record.sprintData) sprintData = record.sprintData;
+      setSI('listo ☁️');
+      return true;
+    }
+    return false;
+  }catch{return false;}
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 const DEF_SESSIONS=[
   {id:'s1',name:'Entrevista 1 — Melbourne, Australia',method:'interview',profile:'E1, 3 años y 2 meses, trabajo estable en agencia de publicidad, excedente real demostrado (compró carro con novio), envía remesas mensuales para gastos específicos (gata, universidad hermano), incertidumbre migratoria por visa, retorno no definido',date:'2026-03-10',summary:'Migrante con trabajo estable formal en agencia de publicidad. Excedente real demostrado: compró carro con su novio. Busca activamente instrumentos para mover su excedente cuando el dólar está bajo (menciona CDT y cuentas de ahorro como referencia). Envía remesas mensuales para gastos específicos controlados. Alta incertidumbre migratoria por visa — condiciona monto disponible, no el interés de invertir. Desconfianza hacia dinero líquido en Colombia pero apertura inmediata ante activos tangibles. Ya conoce ferias de vivienda colombiana en Australia y crédito Bancolombia para no residentes.',quote:'"Voy a empezar a moverme, investigaré lo mismo aquí, debe haber algo similar para mover la plata mientras el dólar está bajito."',hypStatus:{H1:'confirmed',H2:'confirmed',H3:'confirmed',H4:'nuanced',H5:'confirmed'},tags:['trabajo estable','excedente real','CDT','activos tangibles','Australia','visa','busqueda activa','sin retorno definido']},
   {id:'s2',name:'Entrevista 2 — España (Madrid)',method:'interview',profile:'Vanessa, colombiana, 2 años 3 meses, cuida adultos mayores y niños suecos, viajó con su hijo Jerónimo, libre de deudas desde noviembre, proceso de arraigo sociolaboral',date:'2026-03-18',summary:'Migrante en proceso de consolidacion. Trabajo estable desde junio. Libre de deuda de viaje desde noviembre (pagaba 900€/mes). Ahorra activamente con meta propia. Envia muy poco a Colombia (50€ este año). No planea volver. Quiere casa propia en Colombia como base y seguridad. Ya recibio oferta informal de inversion via Instagram y la rechazo por desconfianza al canal.',quote:'"Poder manejar una cuenta yo misma desde aqui y para alla, sin tener intermediarios."',hypStatus:{H1:'confirmed',H2:'confirmed',H3:'nuanced',H4:'confirmed',H5:'confirmed'},tags:['excedente real','trabajo estable','libre de deudas','no remesa','control autonomo','base en Colombia','hijo','España']},
@@ -520,17 +565,19 @@ const DEF_INSIGHTS=[
 let sessions=[],insights=[],sprintData={days:{},cats:{}},fS='all',fI='all';
 
 function save(){
-  try{localStorage.setItem(SK_S,JSON.stringify(sessions));localStorage.setItem(SK_I,JSON.stringify(insights));localStorage.setItem(SK_SP,JSON.stringify(sprintData));setSI('guardado');}
-  catch{setSI('error');}
+  // Guardar siempre en local como respaldo
+  try{localStorage.setItem(SK_S,JSON.stringify(sessions));localStorage.setItem(SK_I,JSON.stringify(insights));localStorage.setItem(SK_SP,JSON.stringify(sprintData));}catch{}
+  // Guardar en nube si está configurado
+  if(USE_CLOUD){cloudSave();}else{setSI('guardado');}
 }
 function load(){
+  // Cargar local como punto de partida
   try{
     const s=localStorage.getItem(SK_S),i=localStorage.getItem(SK_I),sp=localStorage.getItem(SK_SP);
     sessions=s?JSON.parse(s):JSON.parse(JSON.stringify(DEF_SESSIONS));
     insights=i?JSON.parse(i):JSON.parse(JSON.stringify(DEF_INSIGHTS));
     if(sp){sprintData=JSON.parse(sp);}
     else{DAYS.forEach(d=>d.tasks.forEach(t=>{sprintData.days[t.id]=false;}));CATS.forEach(c=>c.questions.forEach(q=>{sprintData.cats[q.id]=false;}));}
-    // ensure defaults exist
     DEF_SESSIONS.forEach(ds=>{if(!sessions.find(s=>s.id===ds.id)){sessions.push(ds);}});
     DEF_INSIGHTS.forEach(di=>{if(!insights.find(i=>i.id===di.id)){insights.push(di);}});
   }catch{
@@ -539,7 +586,14 @@ function load(){
     DAYS.forEach(d=>d.tasks.forEach(t=>{sprintData.days[t.id]=false;}));
     CATS.forEach(c=>c.questions.forEach(q=>{sprintData.cats[q.id]=false;}));
   }
-  setSI('listo');
+  // Si hay nube configurada, cargar desde nube y re-renderizar
+  if(USE_CLOUD){
+    cloudLoad().then(ok=>{
+      if(ok){render(curPage());renderDash();updateDot();}
+    });
+  } else {
+    setSI('listo');
+  }
 }
 function setSI(t){const el=document.getElementById('save-ind');if(el)el.textContent='● '+t;}
 function goTo(pg){
